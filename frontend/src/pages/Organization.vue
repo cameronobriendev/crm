@@ -12,6 +12,20 @@
         v-if="organization._actions?.length"
         :actions="organization._actions"
       />
+      <Button
+        v-if="currentTab?.label === 'Tasks'"
+        variant="solid"
+        :label="__('Create Task')"
+        iconLeft="plus"
+        @click="modalRef.showTask()"
+      />
+      <Button
+        v-else-if="currentTab?.label === 'Notes'"
+        variant="solid"
+        :label="__('Create Note')"
+        iconLeft="plus"
+        @click="modalRef.showNote()"
+      />
     </template>
   </LayoutHeader>
   <div v-if="organization.doc" ref="parentRef" class="flex h-full">
@@ -149,19 +163,39 @@
           :options="{ selectable: false, showTooltip: false }"
         />
         <ContactsListView
-          v-if="tab.label === 'Contacts' && rows.length"
+          v-else-if="tab.label === 'Contacts' && rows.length"
           class="mt-4"
           :rows="rows"
           :columns="columns"
           :options="{ selectable: false, showTooltip: false }"
         />
-        <EmptyState
-          v-if="!rows.length"
-          :icon="tab.icon"
-          :name="__(tab.label)"
-        />
+        <div
+          v-else-if="tab.label === 'Tasks' && tasks.data?.length"
+          class="flex-1 overflow-y-auto px-3 py-4 sm:px-5"
+        >
+          <TaskArea :modalRef="modalRef" :tasks="tasks.data" />
+        </div>
+        <div
+          v-else-if="tab.label === 'Notes' && notes.data?.length"
+          class="grid flex-1 grid-cols-1 content-start gap-4 overflow-y-auto px-3 py-4 sm:px-5 lg:grid-cols-2 xl:grid-cols-3"
+        >
+          <div
+            v-for="note in notes.data"
+            :key="note.name"
+            @click="modalRef.showNote(note)"
+          >
+            <NoteArea v-model="notes" :note="note" />
+          </div>
+        </div>
+        <EmptyState v-else :icon="tab.icon" :name="__(tab.label)" />
       </template>
     </Tabs>
+    <AllModals
+      ref="modalRef"
+      v-model="linkedActivities"
+      doctype="CRM Organization"
+      :doc="organization.doc"
+    />
   </div>
   <ErrorPage
     v-else-if="errorTitle"
@@ -185,10 +219,15 @@ import Icon from '@/components/Icon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import DealsListView from '@/components/ListViews/DealsListView.vue'
 import ContactsListView from '@/components/ListViews/ContactsListView.vue'
+import AllModals from '@/components/Activities/AllModals.vue'
+import TaskArea from '@/components/Activities/TaskArea.vue'
+import NoteArea from '@/components/Activities/NoteArea.vue'
 import WebsiteIcon from '@/components/Icons/WebsiteIcon.vue'
 import CameraIcon from '@/components/Icons/CameraIcon.vue'
 import DealsIcon from '@/components/Icons/DealsIcon.vue'
 import ContactsIcon from '@/components/Icons/ContactsIcon.vue'
+import TaskIcon from '@/components/Icons/TaskIcon.vue'
+import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import DeleteLinkedDocModal from '@/components/DeleteLinkedDocModal.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import { useDocument } from '@/data/document'
@@ -381,7 +420,19 @@ const tabs = [
     icon: ContactsIcon,
     count: computed(() => contacts.data?.length),
   },
+  {
+    label: 'Tasks',
+    icon: TaskIcon,
+    count: computed(() => tasks.data?.length),
+  },
+  {
+    label: 'Notes',
+    icon: NoteIcon,
+    count: computed(() => notes.data?.length),
+  },
 ]
+
+const currentTab = computed(() => tabs[tabIndex.value])
 
 const deals = createListResource({
   type: 'list',
@@ -427,20 +478,71 @@ const contacts = createListResource({
   auto: true,
 })
 
+const tasks = createListResource({
+  type: 'list',
+  doctype: 'CRM Task',
+  cache: ['tasks', 'CRM Organization', props.organizationId],
+  fields: [
+    'name',
+    'title',
+    'description',
+    'assigned_to',
+    'due_date',
+    'priority',
+    'status',
+    'modified',
+    'creation',
+  ],
+  filters: {
+    reference_doctype: 'CRM Organization',
+    reference_docname: props.organizationId,
+  },
+  orderBy: 'modified desc',
+  pageLength: 20,
+  auto: true,
+})
+
+const notes = createListResource({
+  type: 'list',
+  doctype: 'FCRM Note',
+  cache: ['notes', 'CRM Organization', props.organizationId],
+  fields: ['name', 'title', 'content', 'owner', 'modified', 'creation'],
+  filters: {
+    reference_doctype: 'CRM Organization',
+    reference_docname: props.organizationId,
+  },
+  orderBy: 'modified desc',
+  pageLength: 20,
+  auto: true,
+})
+
+// AllModals reloads whatever it is given after a create, edit or delete. Tasks
+// and notes are separate list resources here, so hand it both.
+const linkedActivities = ref({
+  reload: () => {
+    tasks.reload()
+    notes.reload()
+  },
+})
+
+const modalRef = ref(null)
+
 const rows = computed(() => {
-  let list = !tabIndex.value ? deals : contacts
+  if (currentTab.value?.label === 'Deals') {
+    return deals.data?.map((row) => getDealRowObject(row)) || []
+  }
 
-  if (!list.data) return []
+  if (currentTab.value?.label === 'Contacts') {
+    return contacts.data?.map((row) => getContactRowObject(row)) || []
+  }
 
-  return list.data.map((row) => {
-    return !tabIndex.value ? getDealRowObject(row) : getContactRowObject(row)
-  })
+  return []
 })
 
 const { getFormattedCurrency } = getMeta('CRM Deal')
 
 const columns = computed(() => {
-  return tabIndex.value === 0 ? dealColumns : contactColumns
+  return currentTab.value?.label === 'Contacts' ? contactColumns : dealColumns
 })
 
 function getDealRowObject(deal) {
