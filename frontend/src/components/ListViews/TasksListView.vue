@@ -59,7 +59,16 @@
       >
         <template #prefix>
           <div v-if="column.key === 'status'">
-            <TaskStatusIcon :status="item" />
+            <Dropdown :options="taskStatusOptions(updateStatus, row)">
+              <Button
+                :tooltip="__('Change Status')"
+                variant="ghost"
+                class="!h-6 !w-6 hover:bg-surface-gray-3"
+                @click.stop.prevent
+              >
+                <TaskStatusIcon :status="item" />
+              </Button>
+            </Dropdown>
           </div>
           <div v-else-if="column.key === 'priority'">
             <TaskPriorityIcon :priority="item" />
@@ -196,6 +205,7 @@ import {
   isTranslatable,
   formatDuration,
   sanitizeHTML,
+  taskStatusOptions,
 } from '@/utils'
 import {
   Avatar,
@@ -235,6 +245,7 @@ const emit = defineEmits([
   'applyLikeFilter',
   'likeDoc',
   'selectionsChanged',
+  'updateStatus',
 ])
 
 const pageLengthCount = defineModel({ type: Number })
@@ -249,6 +260,11 @@ function getLabel(label, column) {
   if (column.type === 'Duration') return formatDuration(label)
   if (column.options && isTranslatable(column.options)) return __(label)
   return label
+}
+
+function updateStatus(status, row) {
+  if (row.status === status) return
+  emit('updateStatus', { name: row.name, status })
 }
 
 const isLikeFilterApplied = computed(() => {

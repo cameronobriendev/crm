@@ -172,6 +172,7 @@
     @columnWidthUpdated="() => triggerResize++"
     @updatePageCount="(count) => (updatedPageCount = count)"
     @showTask="showTask"
+    @updateStatus="updateStatus"
     @applyFilter="(data) => viewControls.applyFilter(data)"
     @applyLikeFilter="(data) => viewControls.applyLikeFilter(data)"
     @likeDoc="(data) => viewControls.likeDoc(data)"
@@ -359,6 +360,17 @@ function createTask(column) {
     defaults: defaults,
     callbacks: taskCallbacks,
   })
+}
+
+async function updateStatus({ name, status }) {
+  await call('frappe.client.set_value', {
+    doctype: 'CRM Task',
+    name,
+    fieldname: 'status',
+    value: status,
+  })
+  tasks.value.reload()
+  capture('task_updated')
 }
 
 function actions(name) {
