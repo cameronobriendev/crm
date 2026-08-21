@@ -12,6 +12,20 @@
         v-if="contact._actions?.length"
         :actions="contact._actions"
       />
+      <Button
+        v-if="currentTab?.label === 'Tasks'"
+        variant="solid"
+        :label="__('Create Task')"
+        iconLeft="plus"
+        @click="modalRef.showTask()"
+      />
+      <Button
+        v-else-if="currentTab?.label === 'Notes'"
+        variant="solid"
+        :label="__('Create Note')"
+        iconLeft="plus"
+        @click="modalRef.showNote()"
+      />
     </template>
   </LayoutHeader>
   <div v-if="contact.doc" ref="parentRef" class="flex h-full">
@@ -151,9 +165,33 @@
           :columns="columns"
           :options="{ selectable: false, showTooltip: false }"
         />
-        <EmptyState v-if="!rows.length" :icon="tab.icon" name="Deals" />
+        <div
+          v-else-if="tab.label === 'Tasks' && tasks.data?.length"
+          class="flex-1 overflow-y-auto px-3 py-4 sm:px-5"
+        >
+          <TaskArea :modalRef="modalRef" :tasks="tasks.data" />
+        </div>
+        <div
+          v-else-if="tab.label === 'Notes' && notes.data?.length"
+          class="grid flex-1 grid-cols-1 content-start gap-4 overflow-y-auto px-3 py-4 sm:px-5 lg:grid-cols-2 xl:grid-cols-3"
+        >
+          <div
+            v-for="note in notes.data"
+            :key="note.name"
+            @click="modalRef.showNote(note)"
+          >
+            <NoteArea v-model="notes" :note="note" />
+          </div>
+        </div>
+        <EmptyState v-else :icon="tab.icon" :name="__(tab.label)" />
       </template>
     </Tabs>
+    <AllModals
+      ref="modalRef"
+      v-model="linkedActivities"
+      doctype="Contact"
+      :doc="contact.doc"
+    />
   </div>
   <ErrorPage
     v-else-if="errorTitle"
@@ -178,7 +216,12 @@ import LayoutHeader from '@/components/LayoutHeader.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import CameraIcon from '@/components/Icons/CameraIcon.vue'
 import DealsIcon from '@/components/Icons/DealsIcon.vue'
+import TaskIcon from '@/components/Icons/TaskIcon.vue'
+import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import DealsListView from '@/components/ListViews/DealsListView.vue'
+import AllModals from '@/components/Activities/AllModals.vue'
+import TaskArea from '@/components/Activities/TaskArea.vue'
+import NoteArea from '@/components/Activities/NoteArea.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import { validateIsImageFile, setupCustomizations } from '@/utils'
 import { useContactFields } from '@/composables/useContactFields'
@@ -198,6 +241,7 @@ import {
   FileUploader,
   Tabs,
   call,
+  createListResource,
   createResource,
   usePageMeta,
   Dropdown,
@@ -305,7 +349,19 @@ const tabs = [
     icon: DealsIcon,
     count: computed(() => deals.data?.length),
   },
+  {
+    label: 'Tasks',
+    icon: TaskIcon,
+    count: computed(() => tasks.data?.length),
+  },
+  {
+    label: 'Notes',
+    icon: NoteIcon,
+    count: computed(() => notes.data?.length),
+  },
 ]
+
+const currentTab = computed(() => tabs[tabIndex.value])
 
 const deals = createResource({
   url: 'crm.api.contact.get_linked_deals',
@@ -314,8 +370,58 @@ const deals = createResource({
   auto: true,
 })
 
+const tasks = createListResource({
+  type: 'list',
+  doctype: 'CRM Task',
+  cache: ['tasks', 'Contact', props.contactId],
+  fields: [
+    'name',
+    'title',
+    'description',
+    'assigned_to',
+    'due_date',
+    'priority',
+    'status',
+    'modified',
+    'creation',
+  ],
+  filters: {
+    reference_doctype: 'Contact',
+    reference_docname: props.contactId,
+  },
+  orderBy: 'modified desc',
+  pageLength: 20,
+  auto: true,
+})
+
+const notes = createListResource({
+  type: 'list',
+  doctype: 'FCRM Note',
+  cache: ['notes', 'Contact', props.contactId],
+  fields: ['name', 'title', 'content', 'owner', 'modified', 'creation'],
+  filters: {
+    reference_doctype: 'Contact',
+    reference_docname: props.contactId,
+  },
+  orderBy: 'modified desc',
+  pageLength: 20,
+  auto: true,
+})
+
+// AllModals reloads whatever it is given after a create, edit or delete. Tasks
+// and notes are separate list resources here, so hand it both.
+const linkedActivities = ref({
+  reload: () => {
+    tasks.reload()
+    notes.reload()
+  },
+})
+
+const modalRef = ref(null)
+
 const rows = computed(() => {
-  if (!deals.data || deals.data == []) return []
+  if (currentTab.value?.label !== 'Deals') return []
+  if (!deals.data) return []
 
   return deals.data.map((row) => getDealRowObject(row))
 })
