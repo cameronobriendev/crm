@@ -123,14 +123,17 @@
       <div class="flex gap-2 items-center justify-between">
         <div>
           <Button
-            v-if="getRow(itemName, 'reference_docname').label"
+            v-if="
+              getReferenceRoute(
+                getRow(itemName, 'reference_doctype').label,
+                getRow(itemName, 'reference_docname').label,
+              )
+            "
             class="-ml-2"
             variant="ghost"
             size="sm"
             :label="
-              getRow(itemName, 'reference_doctype').label == 'CRM Deal'
-                ? __('Deal')
-                : __('Lead')
+              __(getReferenceLabel(getRow(itemName, 'reference_doctype').label))
             "
             :iconRight="ArrowUpRightIcon"
             @click.stop="
@@ -199,6 +202,7 @@ import { useDoctypeModal } from '@/composables/doctypeModal'
 import { getMeta } from '@/stores/meta'
 import { usersStore } from '@/stores/users'
 import { formatDate } from '@/utils'
+import { getReferenceLabel, getReferenceRoute } from '@/utils/reference'
 import { timestampCell } from '@/composables/useTimelinePreferences'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
 import { Tooltip, Avatar, TextEditor, Dropdown, call } from 'frappe-ui'
@@ -378,13 +382,9 @@ async function deleteTask(name) {
 }
 
 function redirect(doctype, docname) {
-  if (!docname) return
-  let name = doctype == 'CRM Deal' ? 'Deal' : 'Lead'
-  let params = { leadId: docname }
-  if (name == 'Deal') {
-    params = { dealId: docname }
-  }
-  router.push({ name: name, params: params })
+  const route = getReferenceRoute(doctype, docname)
+  if (!route) return
+  router.push(route)
 }
 
 const openTaskFromURL = () => {
