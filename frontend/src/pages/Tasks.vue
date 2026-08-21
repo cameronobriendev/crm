@@ -126,21 +126,25 @@
           <Button
             v-if="
               getReferenceRoute(
-                getRow(itemName, 'reference_doctype').label,
-                getRow(itemName, 'reference_docname').label,
+                getRow(itemName, 'reference_docname').doctype,
+                getRow(itemName, 'reference_docname').docname,
               )
             "
             class="-ml-2"
             variant="ghost"
             size="sm"
             :label="
-              __(getReferenceLabel(getRow(itemName, 'reference_doctype').label))
+              __(
+                getReferenceLabel(
+                  getRow(itemName, 'reference_docname').doctype,
+                ),
+              )
             "
             :iconRight="ArrowUpRightIcon"
             @click.stop="
               redirect(
-                getRow(itemName, 'reference_doctype').label,
-                getRow(itemName, 'reference_docname').label,
+                getRow(itemName, 'reference_docname').doctype,
+                getRow(itemName, 'reference_docname').docname,
               )
             "
           />
@@ -314,6 +318,14 @@ function parseRows(rows, columns = []) {
         _rows[row] = {
           label: task.assigned_to && getUser(task.assigned_to).full_name,
           ...(task.assigned_to && getUser(task.assigned_to)),
+        }
+      } else if (row == 'reference_docname') {
+        // _reference_title comes from CRMTask.parse_list_data. Keep the raw
+        // docname alongside it, since that is what the route needs.
+        _rows[row] = {
+          label: task._reference_title || task.reference_docname,
+          doctype: task.reference_doctype,
+          docname: task.reference_docname,
         }
       }
     })
