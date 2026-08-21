@@ -128,6 +128,20 @@
               />
             </Button>
           </div>
+          <div
+            v-else-if="column.key === 'reference_docname'"
+            class="truncate text-base"
+          >
+            <RouterLink
+              v-if="referenceRoute(item)"
+              :to="referenceRoute(item)"
+              class="hover:text-ink-gray-9 hover:underline"
+              @click.stop
+            >
+              {{ item.label }}
+            </RouterLink>
+            <span v-else>{{ item.label }}</span>
+          </div>
           <RatingInput
             v-else-if="column.type === 'Rating'"
             :value="item"
@@ -207,6 +221,7 @@ import {
   sanitizeHTML,
   taskStatusOptions,
 } from '@/utils'
+import { getReferenceRoute } from '@/utils/reference'
 import {
   Avatar,
   ListView,
@@ -265,6 +280,10 @@ function getLabel(label, column) {
 function updateStatus(status, row) {
   if (row.status === status) return
   emit('updateStatus', { name: row.name, status })
+}
+
+function referenceRoute(item) {
+  return getReferenceRoute(item?.doctype, item?.docname)
 }
 
 const isLikeFilterApplied = computed(() => {
