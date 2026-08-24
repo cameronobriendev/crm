@@ -147,6 +147,7 @@
           <component :is="tab.icon" v-if="tab.icon" class="h-5" />
           {{ __(tab.label) }}
           <Badge
+            v-if="tab.count !== undefined"
             class="group-hover:bg-surface-gray-10"
             :class="[selected ? 'bg-surface-gray-10' : 'bg-gray-600']"
             variant="solid"
@@ -183,6 +184,15 @@
             <NoteArea v-model="notes" :note="note" />
           </div>
         </div>
+        <OSBriefPanel v-else-if="tab.label === 'Brief'" :brief="osBrief" />
+        <OSMeetingsPanel
+          v-else-if="tab.label === 'Meetings'"
+          :meetings="osMeetings"
+          :meetingDetails="osMeetingDetails"
+          :expandedSlug="osExpandedSlug"
+          @toggle="toggleOSMeeting"
+        />
+        <OSCommsPanel v-else-if="tab.label === 'Comms'" :comms="osComms" />
         <EmptyState v-else :icon="tab.icon" :name="__(tab.label)" />
       </template>
     </Tabs>
@@ -222,6 +232,13 @@ import DealsListView from '@/components/ListViews/DealsListView.vue'
 import AllModals from '@/components/Activities/AllModals.vue'
 import TaskArea from '@/components/Activities/TaskArea.vue'
 import NoteArea from '@/components/Activities/NoteArea.vue'
+import CalendarIcon from '@/components/Icons/CalendarIcon.vue'
+import EmailIcon from '@/components/Icons/EmailIcon.vue'
+import FileTextIcon from '@/components/Icons/FileTextIcon.vue'
+import OSBriefPanel from '@/components/BrasshelmOS/OSBriefPanel.vue'
+import OSCommsPanel from '@/components/BrasshelmOS/OSCommsPanel.vue'
+import OSMeetingsPanel from '@/components/BrasshelmOS/OSMeetingsPanel.vue'
+import { useBrasshelmOS } from '@/composables/useBrasshelmOS'
 import CustomActions from '@/components/CustomActions.vue'
 import { validateIsImageFile, setupCustomizations } from '@/utils'
 import { useContactFields } from '@/composables/useContactFields'
@@ -343,7 +360,25 @@ function changeContactImage(file) {
 }
 
 const tabIndex = ref(0)
-const tabs = [
+
+// The BrassHelm OS folder id for this person. Hidden on the form, present on
+// the loaded document. Empty means this contact is not linked to the OS, and
+// the OS tabs are not rendered at all.
+const osContactId = computed(() => contact.doc?.os_contact_id || '')
+
+const {
+  brief: osBrief,
+  meetings: osMeetings,
+  comms: osComms,
+  meetingDetails: osMeetingDetails,
+  expandedSlug: osExpandedSlug,
+  loadBrief: loadOSBrief,
+  loadMeetings: loadOSMeetings,
+  loadComms: loadOSComms,
+  toggleMeeting: toggleOSMeeting,
+} = useBrasshelmOS(osContactId)
+
+const crmTabs = [
   {
     label: 'Deals',
     icon: DealsIcon,
@@ -361,7 +396,33 @@ const tabs = [
   },
 ]
 
-const currentTab = computed(() => tabs[tabIndex.value])
+// A contact with no OS folder gets the CRM tabs and nothing else.
+const tabs = computed(() => {
+  if (!osContactId.value) return crmTabs
+
+  return [
+    ...crmTabs,
+    { label: 'Brief', icon: FileTextIcon },
+    {
+      label: 'Meetings',
+      icon: CalendarIcon,
+      // A plain value, not a computed: the badge stays off until the meetings
+      // have actually been fetched, and this whole list recomputes when they
+      // land.
+      count: osMeetings.data?.meetings?.length,
+    },
+    { label: 'Comms', icon: EmailIcon },
+  ]
+})
+
+const currentTab = computed(() => tabs.value[tabIndex.value])
+
+// Every OS fetch is lazy: nothing is asked of the OS until its tab is opened.
+watch(currentTab, (tab) => {
+  if (tab?.label === 'Brief') loadOSBrief()
+  else if (tab?.label === 'Meetings') loadOSMeetings()
+  else if (tab?.label === 'Comms') loadOSComms()
+})
 
 const deals = createResource({
   url: 'crm.api.contact.get_linked_deals',
