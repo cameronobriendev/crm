@@ -267,11 +267,12 @@ const links = [
     icon: DealsIcon,
     to: 'Deals',
   },
-  {
-    label: 'Contacts',
-    icon: ContactsIcon,
-    to: 'Contacts',
-  },
+  // Contacts is deliberately absent from this list. The doctype, its records and
+  // the /crm/contacts route are all untouched: a contact page is still reached
+  // from its organization, from a deal, from a call log and from search, and the
+  // breadcrumb on a contact page still walks back to the list. Only the standing
+  // menu entry is gone, so the sidebar offers one place to work people from
+  // rather than two.
   {
     label: 'Organizations',
     icon: OrganizationsIcon,
