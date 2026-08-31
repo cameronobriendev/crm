@@ -47,8 +47,18 @@
       :tabs="tabs"
       class="flex flex-1 overflow-hidden flex-col [&_[role='tab']]:px-0 [&_[role='tab']]:shrink-0 [&_[role='tablist']]:px-5 [&_[role='tablist']::-webkit-scrollbar]:h-0 [&_[role='tablist']]:min-h-[45px] [&_[role='tablist']]:gap-7.5 [&_[role='tabpanel']:not([hidden])]:flex [&_[role='tabpanel']:not([hidden])]:grow"
     >
-      <template #tab-panel>
+      <template #tab-panel="{ tab }">
+        <OSBriefPanel v-if="tab.name === 'Brief'" :brief="osBrief" />
+        <OSMeetingsPanel
+          v-else-if="tab.name === 'Meetings'"
+          :meetings="osMeetings"
+          :meetingDetails="osMeetingDetails"
+          :expandedSlug="osExpandedSlug"
+          @toggle="toggleOSMeeting"
+        />
+        <OSCommsPanel v-else-if="tab.name === 'Comms'" :comms="osComms" />
         <Activities
+          v-else
           ref="activities"
           v-model:reload="reload"
           v-model:tabIndex="tabIndex"
@@ -250,6 +260,13 @@ import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import CameraIcon from '@/components/Icons/CameraIcon.vue'
 import LinkIcon from '@/components/Icons/LinkIcon.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
+import CalendarIcon from '@/components/Icons/CalendarIcon.vue'
+import FileTextIcon from '@/components/Icons/FileTextIcon.vue'
+import InboxIcon from '@/components/Icons/InboxIcon.vue'
+import OSBriefPanel from '@/components/BrasshelmOS/OSBriefPanel.vue'
+import OSCommsPanel from '@/components/BrasshelmOS/OSCommsPanel.vue'
+import OSMeetingsPanel from '@/components/BrasshelmOS/OSMeetingsPanel.vue'
+import { useBrasshelmOS } from '@/composables/useBrasshelmOS'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import Activities from '@/components/Activities/Activities.vue'
@@ -324,6 +341,23 @@ const {
 const canDelete = computed(() => permissions.data?.permissions?.delete || false)
 
 const doc = computed(() => document.doc || {})
+
+// The BrassHelm OS folder id for this person. Hidden on the form, present on
+// the loaded document. Empty means this lead is not linked to the OS, and the
+// OS tabs are not rendered at all.
+const osContactId = computed(() => doc.value?.os_contact_id || '')
+
+const {
+  brief: osBrief,
+  meetings: osMeetings,
+  comms: osComms,
+  meetingDetails: osMeetingDetails,
+  expandedSlug: osExpandedSlug,
+  loadBrief: loadOSBrief,
+  loadMeetings: loadOSMeetings,
+  loadComms: loadOSComms,
+  toggleMeeting: toggleOSMeeting,
+} = useBrasshelmOS(osContactId)
 
 useUnsavedChangesWarning(() => document.isDirty)
 
@@ -460,11 +494,41 @@ const tabs = computed(() => {
       icon: WhatsAppIcon,
       condition: () => whatsappEnabled.value,
     },
+    // A lead with no OS folder gets the CRM tabs and nothing else.
+    {
+      name: 'Brief',
+      label: __('Brief'),
+      icon: FileTextIcon,
+      condition: () => !!osContactId.value,
+    },
+    {
+      name: 'Meetings',
+      label: __('Meetings'),
+      icon: CalendarIcon,
+      condition: () => !!osContactId.value,
+    },
+    {
+      name: 'Comms',
+      label: __('Comms'),
+      icon: InboxIcon,
+      condition: () => !!osContactId.value,
+    },
   ]
   return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
 })
 
 const { tabIndex, changeTabTo } = useActiveTabManager(tabs, 'lastLeadTab')
+
+const OS_TAB_NAMES = ['Brief', 'Meetings', 'Comms']
+
+const selectedTab = computed(() => tabs.value?.[tabIndex.value])
+
+// Every OS fetch is lazy: nothing is asked of the OS until its tab is opened.
+watch(selectedTab, (tab) => {
+  if (tab?.name === 'Brief') loadOSBrief()
+  else if (tab?.name === 'Meetings') loadOSMeetings()
+  else if (tab?.name === 'Comms') loadOSComms()
+})
 
 const sections = createResource({
   url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_sidepanel_sections',
@@ -506,11 +570,21 @@ function deleteLead() {
 }
 
 function openEmailBox() {
-  let currentTab = tabs.value[tabIndex.value]
-  if (!['Emails', 'Comments', 'Activities'].includes(currentTab.name)) {
-    activities.value.changeTabTo('emails')
+  let currentTab = tabs.value?.[tabIndex.value]
+
+  // An OS tab owns the whole panel, so the Activities component is not on the
+  // page at all while one is selected and there is nothing to reach into. Move
+  // the page's own tab first and let Activities mount before touching it.
+  if (OS_TAB_NAMES.includes(currentTab?.name)) {
+    changeTabTo('emails')
+  } else if (!['Emails', 'Comments', 'Activities'].includes(currentTab?.name)) {
+    activities.value?.changeTabTo('emails')
   }
-  nextTick(() => (activities.value.emailBox.show = true))
+
+  nextTick(() => {
+    if (!activities.value) return
+    activities.value.emailBox.show = true
+  })
 }
 
 function statusLabel(status) {
