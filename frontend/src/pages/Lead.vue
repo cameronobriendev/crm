@@ -48,13 +48,14 @@
       class="flex flex-1 overflow-hidden flex-col [&_[role='tab']]:px-0 [&_[role='tab']]:shrink-0 [&_[role='tablist']]:px-5 [&_[role='tablist']::-webkit-scrollbar]:h-0 [&_[role='tablist']]:min-h-[45px] [&_[role='tablist']]:gap-7.5 [&_[role='tabpanel']:not([hidden])]:flex [&_[role='tabpanel']:not([hidden])]:grow"
     >
       <template #tab-panel="{ tab }">
-        <OSBriefPanel v-if="tab.name === 'Brief'" :brief="osBrief" />
-        <OSMeetingsPanel
+        <CrmBriefPanel v-if="tab.name === 'Brief'" :brief="crmBrief" />
+        <CrmMeetingsPanel
           v-else-if="tab.name === 'Meetings'"
-          :meetings="osMeetings"
-          :meetingDetails="osMeetingDetails"
-          :expandedSlug="osExpandedSlug"
-          @toggle="toggleOSMeeting"
+          :meetings="crmMeetings"
+          :details="crmMeetingDetails"
+          :expandedName="crmExpandedMeeting"
+          @toggle="toggleCrmMeeting"
+          @loadMore="loadMoreCrmMeetings"
         />
         <OSCommsPanel v-else-if="tab.name === 'Comms'" :comms="osComms" />
         <Activities
@@ -261,12 +262,13 @@ import CameraIcon from '@/components/Icons/CameraIcon.vue'
 import LinkIcon from '@/components/Icons/LinkIcon.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import CalendarIcon from '@/components/Icons/CalendarIcon.vue'
-import FileTextIcon from '@/components/Icons/FileTextIcon.vue'
+import SparkleIcon from '@/components/Icons/SparkleIcon.vue'
 import InboxIcon from '@/components/Icons/InboxIcon.vue'
-import OSBriefPanel from '@/components/BrasshelmOS/OSBriefPanel.vue'
+import CrmBriefPanel from '@/components/BrasshelmCrm/CrmBriefPanel.vue'
+import CrmMeetingsPanel from '@/components/BrasshelmCrm/CrmMeetingsPanel.vue'
 import OSCommsPanel from '@/components/BrasshelmOS/OSCommsPanel.vue'
-import OSMeetingsPanel from '@/components/BrasshelmOS/OSMeetingsPanel.vue'
 import { useBrasshelmOS } from '@/composables/useBrasshelmOS'
+import { useCrmMeetings } from '@/composables/useCrmMeetings'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import Activities from '@/components/Activities/Activities.vue'
@@ -292,6 +294,7 @@ import { useDocument } from '@/data/document'
 import { whatsappEnabled } from '@/composables/whatsapp'
 import { callEnabled } from '@/composables/telephony'
 import {
+  createListResource,
   createResource,
   FileUploader,
   Dropdown,
@@ -347,17 +350,38 @@ const doc = computed(() => document.doc || {})
 // OS tabs are not rendered at all.
 const osContactId = computed(() => doc.value?.os_contact_id || '')
 
+const { comms: osComms, loadComms: loadOSComms } = useBrasshelmOS(osContactId)
+
+// The brief and the meetings are Frappe records now, filed against this lead,
+// so they are read from the CRM itself rather than proxied out to the OS. Comms
+// is still the OS surface until the email sync lands.
 const {
-  brief: osBrief,
-  meetings: osMeetings,
-  comms: osComms,
-  meetingDetails: osMeetingDetails,
-  expandedSlug: osExpandedSlug,
-  loadBrief: loadOSBrief,
-  loadMeetings: loadOSMeetings,
-  loadComms: loadOSComms,
-  toggleMeeting: toggleOSMeeting,
-} = useBrasshelmOS(osContactId)
+  meetings: crmMeetings,
+  details: crmMeetingDetails,
+  expandedName: crmExpandedMeeting,
+  toggleMeeting: toggleCrmMeeting,
+  loadMore: loadMoreCrmMeetings,
+} = useCrmMeetings(props.leadId)
+
+// One row at most, and it carries the whole brief. Fetching the body with the
+// existence check keeps this to a single query: the tab needs to know whether
+// there is a brief before it can decide to exist at all.
+const crmBrief = createListResource({
+  type: 'list',
+  doctype: 'CRM Brief',
+  cache: ['crmBrief', 'CRM Lead', props.leadId],
+  fields: ['name', 'brief', 'generated_at'],
+  filters: {
+    reference_doctype: 'CRM Lead',
+    reference_docname: props.leadId,
+  },
+  orderBy: 'generated_at desc',
+  pageLength: 1,
+  auto: true,
+  // A missing or unreachable brief store leaves data empty, which hides the
+  // tab. The lead page says nothing about it.
+  onError: () => {},
+})
 
 useUnsavedChangesWarning(() => document.isDirty)
 
@@ -494,19 +518,22 @@ const tabs = computed(() => {
       icon: WhatsAppIcon,
       condition: () => whatsappEnabled.value,
     },
-    // A lead with no OS folder gets the CRM tabs and nothing else.
+    // Brief and Meetings appear only once the lead has the record behind them.
+    // Both lists are fetched with the page, so this reads an answer already in
+    // hand rather than asking a question on every render.
     {
       name: 'Brief',
       label: __('Brief'),
-      icon: FileTextIcon,
-      condition: () => !!osContactId.value,
+      icon: SparkleIcon,
+      condition: () => !!crmBrief.data?.length,
     },
     {
       name: 'Meetings',
       label: __('Meetings'),
       icon: CalendarIcon,
-      condition: () => !!osContactId.value,
+      condition: () => !!crmMeetings.data?.length,
     },
+    // A lead with no OS folder gets the CRM tabs and nothing else.
     {
       name: 'Comms',
       label: __('Comms'),
@@ -519,15 +546,16 @@ const tabs = computed(() => {
 
 const { tabIndex, changeTabTo } = useActiveTabManager(tabs, 'lastLeadTab')
 
-const OS_TAB_NAMES = ['Brief', 'Meetings', 'Comms']
+// Tabs that render their own panel instead of the Activities component.
+const PANEL_TAB_NAMES = ['Brief', 'Meetings', 'Comms']
 
 const selectedTab = computed(() => tabs.value?.[tabIndex.value])
 
-// Every OS fetch is lazy: nothing is asked of the OS until its tab is opened.
+// The OS fetch stays lazy: nothing is asked of the OS until its tab is opened.
+// Brief and Meetings need no trigger here, because their lists came with the
+// page and the meeting bodies load as rows are opened.
 watch(selectedTab, (tab) => {
-  if (tab?.name === 'Brief') loadOSBrief()
-  else if (tab?.name === 'Meetings') loadOSMeetings()
-  else if (tab?.name === 'Comms') loadOSComms()
+  if (tab?.name === 'Comms') loadOSComms()
 })
 
 const sections = createResource({
@@ -572,10 +600,10 @@ function deleteLead() {
 function openEmailBox() {
   let currentTab = tabs.value?.[tabIndex.value]
 
-  // An OS tab owns the whole panel, so the Activities component is not on the
+  // A panel tab owns the whole panel, so the Activities component is not on the
   // page at all while one is selected and there is nothing to reach into. Move
   // the page's own tab first and let Activities mount before touching it.
-  if (OS_TAB_NAMES.includes(currentTab?.name)) {
+  if (PANEL_TAB_NAMES.includes(currentTab?.name)) {
     changeTabTo('emails')
   } else if (!['Emails', 'Comments', 'Activities'].includes(currentTab?.name)) {
     activities.value?.changeTabTo('emails')
