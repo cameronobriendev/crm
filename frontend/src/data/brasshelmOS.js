@@ -33,10 +33,11 @@ export function contactPath(osId, suffix = '') {
   return `/contact/${encodeURIComponent(osId)}${suffix}`
 }
 
-async function osFetch(path) {
+async function osFetch(path, { method = 'GET' } = {}) {
   let response
   try {
     response = await fetch(osUrl(path), {
+      method,
       credentials: 'include',
       cache: 'no-store',
       headers: { Accept: 'application/json' },
@@ -77,4 +78,16 @@ export function getMeeting(osId, slug) {
 
 export function getComms(osId) {
   return osFetch(contactPath(osId, '/comms'))
+}
+
+// Whether the OS considers the brief it wrote for this person still current,
+// and when it intends to write the next one.
+export function getBriefStatus(osId) {
+  return osFetch(contactPath(osId, '/brief-status'))
+}
+
+// Ask the OS to rebuild now. It answers whether it started, not whether it
+// finished, so the caller watches brief-status for the end.
+export function requestRebuild(osId) {
+  return osFetch(contactPath(osId, '/rebuild'), { method: 'POST' })
 }

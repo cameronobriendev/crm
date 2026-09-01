@@ -48,7 +48,14 @@
       class="flex flex-1 overflow-hidden flex-col [&_[role='tab']]:px-0 [&_[role='tab']]:shrink-0 [&_[role='tablist']]:px-5 [&_[role='tablist']::-webkit-scrollbar]:h-0 [&_[role='tablist']]:min-h-[45px] [&_[role='tablist']]:gap-7.5 [&_[role='tabpanel']:not([hidden])]:flex [&_[role='tabpanel']:not([hidden])]:grow"
     >
       <template #tab-panel="{ tab }">
-        <CrmBriefPanel v-if="tab.name === 'Brief'" :brief="crmBrief" />
+        <CrmBriefPanel
+          v-if="tab.name === 'Brief'"
+          :brief="crmBrief"
+          :freshness="briefFreshness.data"
+          :isRunning="briefIsRunning"
+          :startRefused="briefStartRefused"
+          @rebuild="rebuildBrief"
+        />
         <CrmMeetingsPanel
           v-else-if="tab.name === 'Meetings'"
           :meetings="crmMeetings"
@@ -268,6 +275,7 @@ import CrmBriefPanel from '@/components/BrasshelmCrm/CrmBriefPanel.vue'
 import CrmMeetingsPanel from '@/components/BrasshelmCrm/CrmMeetingsPanel.vue'
 import OSCommsPanel from '@/components/BrasshelmOS/OSCommsPanel.vue'
 import { useBrasshelmOS } from '@/composables/useBrasshelmOS'
+import { useBriefFreshness } from '@/composables/useBriefFreshness'
 import { useCrmMeetings } from '@/composables/useCrmMeetings'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
@@ -381,6 +389,20 @@ const crmBrief = createListResource({
   // A missing or unreachable brief store leaves data empty, which hides the
   // tab. The lead page says nothing about it.
   onError: () => {},
+})
+
+// Whether that brief is still the one the OS would write today. The CRM owns
+// the brief; only the OS knows whether it has gone behind. When the OS says
+// nothing, the Brief tab renders exactly as it does without this.
+const {
+  status: briefFreshness,
+  startRefused: briefStartRefused,
+  isRunning: briefIsRunning,
+  loadStatus: loadBriefFreshness,
+  rebuild: rebuildBrief,
+} = useBriefFreshness(osContactId, {
+  // The run rewrote the record, so re-read it and let the new brief render.
+  onRefreshed: () => crmBrief.reload(),
 })
 
 useUnsavedChangesWarning(() => document.isDirty)
@@ -551,11 +573,13 @@ const PANEL_TAB_NAMES = ['Brief', 'Meetings', 'Comms']
 
 const selectedTab = computed(() => tabs.value?.[tabIndex.value])
 
-// The OS fetch stays lazy: nothing is asked of the OS until its tab is opened.
-// Brief and Meetings need no trigger here, because their lists came with the
-// page and the meeting bodies load as rows are opened.
+// The OS fetches stay lazy: nothing is asked of the OS until its tab is opened.
+// The brief and the meetings themselves need no trigger here, because their
+// lists came with the page and the meeting bodies load as rows are opened. The
+// brief's freshness is an OS question, so it waits for the tab like Comms does.
 watch(selectedTab, (tab) => {
-  if (tab?.name === 'Comms') loadOSComms()
+  if (tab?.name === 'Brief') loadBriefFreshness()
+  else if (tab?.name === 'Comms') loadOSComms()
 })
 
 const sections = createResource({
