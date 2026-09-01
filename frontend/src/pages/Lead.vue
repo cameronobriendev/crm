@@ -34,11 +34,13 @@
           </Button>
         </template>
       </Dropdown>
-      <Button
-        :label="__('Convert to Deal')"
-        variant="solid"
-        @click="showConvertToDealModal = true"
-      />
+      <!-- Convert to Deal is deliberately absent. A converted lead stops being
+           matched by the phone system, and none of the BrassHelm surfaces (the
+           brief, the meetings, the timeline meetings) exist on the Deal page
+           yet, so converting today loses more than it gains. The button comes
+           back when Deal pages earn their tabs. Conversion itself is untouched:
+           the backend, the modal and the bulk action on the Leads list all
+           still work. -->
     </template>
   </LayoutHeader>
   <div v-if="doc.name" class="flex h-full overflow-hidden">

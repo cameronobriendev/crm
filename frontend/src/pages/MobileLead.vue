@@ -50,11 +50,10 @@
         v-if="document.actions?.length"
         :actions="document.actions"
       />
-      <Button
-        :label="__('Convert')"
-        variant="solid"
-        @click="showConvertToDealModal = true"
-      />
+      <!-- Convert is deliberately absent here for the same reason it is gone
+           from the desktop lead page: a converted lead stops being matched by
+           the phone system and the Deal page has none of the BrassHelm tabs
+           yet. Hidden on both lead surfaces or on neither. -->
     </div>
   </div>
   <div v-if="doc.name" class="flex h-full overflow-hidden">

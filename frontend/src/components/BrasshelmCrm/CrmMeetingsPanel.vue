@@ -106,8 +106,34 @@
               v-if="detailOf(meeting.name).data.transcript"
               class="flex flex-col gap-1.5"
             >
-              <div class="text-p-sm text-ink-gray-5">
-                {{ __('Transcript') }}
+              <div class="flex items-center gap-3">
+                <div class="text-p-sm text-ink-gray-5">
+                  {{ __('Transcript') }}
+                </div>
+                <Button
+                  :label="
+                    copiedName === meeting.name
+                      ? __('Copied')
+                      : __('Copy transcript')
+                  "
+                  class="ml-auto"
+                  @click="
+                    copyTranscript(
+                      meeting.name,
+                      detailOf(meeting.name).data.transcript,
+                    )
+                  "
+                />
+              </div>
+              <div
+                v-if="copyFailed === meeting.name"
+                class="text-p-sm text-ink-gray-5"
+              >
+                {{
+                  __(
+                    'The browser would not let the page copy. Select the transcript and copy it yourself.',
+                  )
+                }}
               </div>
               <!-- The whole transcript is in the page, not windowed, so the
                    browser's own find lands on it. -->
@@ -141,7 +167,7 @@ import { meetingParticipants } from '@/utils/participants'
 import { richTextIsEmpty } from '@/utils/richText'
 import { formatDate, formatDuration } from '@/utils'
 import { Button, FeatherIcon } from 'frappe-ui'
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 
 const props = defineProps({
   meetings: { type: Object, required: true },
@@ -160,6 +186,37 @@ function detailOf(name) {
 function peopleOn(name) {
   const doc = detailOf(name)?.data
   return doc ? meetingParticipants(doc) : []
+}
+
+// Which meeting is currently showing "Copied", and which one could not copy.
+// Held by meeting name rather than as booleans so two open rows cannot report
+// each other's result.
+const copiedName = ref('')
+const copyFailed = ref('')
+let copiedTimer = null
+
+onBeforeUnmount(() => clearTimeout(copiedTimer))
+
+// The raw transcript as stored, speaker labels and all. What lands on the
+// clipboard is what a person would paste into notes, not the rendered page.
+async function copyTranscript(name, transcript) {
+  if (!transcript) return
+
+  clearTimeout(copiedTimer)
+  copyFailed.value = ''
+
+  try {
+    await navigator.clipboard.writeText(transcript)
+  } catch {
+    // Some contexts refuse clipboard writes outright. Say so plainly and
+    // leave the transcript on the page for the reader to take themselves.
+    copiedName.value = ''
+    copyFailed.value = name
+    return
+  }
+
+  copiedName.value = name
+  copiedTimer = setTimeout(() => (copiedName.value = ''), 2000)
 }
 
 // Date first, then whatever else the record actually knows.
