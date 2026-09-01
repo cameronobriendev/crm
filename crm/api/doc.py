@@ -334,8 +334,13 @@ def get_data(
 			rows = frappe.parse_json(list_view_settings.rows)
 			is_default = False
 		elif not custom_view or (is_default and hasattr(_list, "default_list_data")):
-			rows = default_rows
-			columns = _list.default_list_data().get("columns")
+			# A doctype whose controller does not define default_list_data keeps the
+			# Name / Last Modified literals set above instead of raising on the
+			# missing attribute. Same guard sync_default_rows and
+			# sync_default_columns already apply in crm_view_settings.py.
+			if hasattr(_list, "default_list_data"):
+				rows = default_rows
+				columns = _list.default_list_data().get("columns")
 
 		# check if rows has all keys from columns if not add them
 		for column in columns:

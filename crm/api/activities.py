@@ -6,6 +6,7 @@ from frappe import _
 from frappe.desk.form.load import get_docinfo
 from frappe.query_builder import JoinType
 from frappe.translate import get_translated_doctypes
+from frappe.utils import get_datetime
 
 from crm.fcrm.doctype.crm_call_log.crm_call_log import parse_call_log
 
@@ -309,10 +310,63 @@ def get_lead_activities(name: str):
 	tasks = get_linked_tasks(name) + get_linked_calls(name).get("tasks", [])
 	attachments = get_attachments("CRM Lead", name)
 
+	activities += get_linked_meetings(name)
+
 	activities.sort(key=lambda x: x["creation"], reverse=True)
 	activities = handle_multiple_versions(activities)
 
 	return activities, calls, notes, tasks, attachments
+
+
+def get_linked_meetings(name: str):
+	"""Meetings captured against a lead, shaped as timeline activities.
+
+	Fork-only. CRM Meeting is a BrassHelm doctype, so a site that has not been
+	migrated yet has no table to read and the timeline simply carries no
+	meetings rather than erroring.
+	"""
+	if not frappe.db.exists("DocType", "CRM Meeting"):
+		return []
+
+	meetings = frappe.db.get_all(
+		"CRM Meeting",
+		filters={"reference_doctype": "CRM Lead", "reference_docname": name},
+		fields=[
+			"name",
+			"title",
+			"meeting_date",
+			"duration_seconds",
+			"platform",
+			"owner",
+			"creation",
+		],
+	)
+
+	activities = []
+
+	for meeting in meetings:
+		# The timeline sorts and stamps on `creation`, so a meeting takes its
+		# place by when it happened rather than by when it was filed. Coerced
+		# because the rest of the list is datetimes and a plain date would not
+		# compare against them.
+		occurred_at = get_datetime(meeting.meeting_date or meeting.creation)
+
+		activities.append(
+			{
+				"name": meeting.name,
+				"activity_type": "meeting",
+				"creation": occurred_at,
+				"owner": meeting.owner,
+				"is_lead": True,
+				"data": {
+					"title": meeting.title,
+					"duration_seconds": meeting.duration_seconds,
+					"platform": meeting.platform,
+				},
+			}
+		)
+
+	return activities
 
 
 def get_attachments(doctype: str, name: str):

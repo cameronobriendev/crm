@@ -103,6 +103,12 @@ const routes = [
     component: () => import('@/pages/CallLogs.vue'),
   },
   {
+    alias: '/meetings',
+    path: '/meetings/view/:viewType?',
+    name: 'Meetings',
+    component: () => import('@/pages/Meetings.vue'),
+  },
+  {
     path: '/data-import',
     name: 'DataImportList',
     component: () => import('@/pages/DataImport.vue'),
@@ -236,6 +242,7 @@ router.beforeEach(async (to, from, next) => {
       'Notes',
       'Tasks',
       'Call Logs',
+      'Meetings',
     ].includes(to.name) &&
     !to.query?.view
   ) {
@@ -254,6 +261,7 @@ router.beforeEach(async (to, from, next) => {
         Notes: 'FCRM Note',
         Tasks: 'CRM Task',
         'Call Logs': 'CRM Call Log',
+        Meetings: 'CRM Meeting',
       }
 
       const doctype = doctypeMap[to.name]

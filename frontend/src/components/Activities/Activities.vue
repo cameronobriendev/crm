@@ -236,6 +236,31 @@
           >
             <CallArea :activity="activity" />
           </div>
+          <div
+            v-else-if="activity.activity_type == 'meeting'"
+            :id="activity.name"
+            class="mb-4 flex flex-col gap-2 py-1.5"
+          >
+            <div class="flex items-center justify-stretch gap-2 text-base">
+              <!-- The meeting itself lives on the Meetings tab. This is the
+                   line that says it happened, and the way through to it. -->
+              <button
+                class="inline-flex items-center flex-wrap gap-1.5 text-left hover:underline underline-offset-2"
+                @click="changeTabTo('meetings')"
+              >
+                <span class="text-ink-gray-5">{{ __('Meeting') }}</span>
+                <span class="text-ink-gray-8 font-medium">
+                  {{ activity.data?.title || activity.name }}
+                </span>
+                <span v-if="meetingMeta(activity)" class="text-ink-gray-5">{{
+                  meetingMeta(activity)
+                }}</span>
+              </button>
+              <div class="ml-auto whitespace-nowrap">
+                <TimelineTimestamp :date="activity.creation" />
+              </div>
+            </div>
+          </div>
           <div v-else class="mb-4 flex flex-col gap-2 py-1.5">
             <div class="flex items-center justify-stretch gap-2 text-base">
               <div
@@ -471,7 +496,8 @@ import WhatsappTemplateSelectorModal from '@/components/Modals/WhatsappTemplateS
 import AllModals from '@/components/Activities/AllModals.vue'
 import FilesUploader from '@/components/FilesUploader/FilesUploader.vue'
 import TimelineTimestamp from '@/components/Activities/TimelineTimestamp.vue'
-import { startCase } from '@/utils'
+import CalendarIcon from '@/components/Icons/CalendarIcon.vue'
+import { formatDuration, startCase } from '@/utils'
 import { globalStore } from '@/stores/global'
 import { usersStore } from '@/stores/users'
 import { useTimelinePreferences } from '@/composables/useTimelinePreferences'
@@ -674,6 +700,17 @@ const activities = computed(() => {
   return sortByCreation(_activities, isNewestFirst.value)
 })
 
+// The trailing half of a meeting line: how long it ran, and where it ran.
+// Either can be absent on a record, and an absent one is simply not written.
+function meetingMeta(activity) {
+  return [
+    formatDuration(activity.data?.duration_seconds),
+    activity.data?.platform,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
 function sortByCreation(list, newestFirst = false) {
   // Direction comes from the comparator operand order (like sortByModified),
   // not .reverse(). A consistent comparator keeps .sort() idempotent, so
@@ -806,6 +843,9 @@ function timelineIcon(activity_type, is_lead) {
       break
     case 'attachment_log':
       icon = AttachmentIcon
+      break
+    case 'meeting':
+      icon = CalendarIcon
       break
     default:
       icon = DotIcon
