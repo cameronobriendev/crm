@@ -34,6 +34,33 @@
           </Button>
         </template>
       </Dropdown>
+      <!-- The brief's freshness sits in the header rather than inside the
+           Brief tab, because a brief going stale is something to be told, not
+           something to go looking for. It says nothing at all while the brief
+           is current. -->
+      <template v-if="briefHasSomethingToSay">
+        <div
+          v-if="briefIsRunning"
+          class="flex items-center gap-1.5 text-p-sm text-ink-gray-5"
+        >
+          <LoadingIndicator class="h-3 w-3" />
+          <span>{{ __('Rebuilding brief') }}</span>
+        </div>
+        <template v-else>
+          <Tooltip :text="briefPendingDetail">
+            <div
+              class="rounded border border-outline-amber-2 px-2 py-1 text-p-sm text-ink-gray-7"
+            >
+              {{ __('Brief not current') }}
+            </div>
+          </Tooltip>
+          <Button :label="__('Rebuild')" @click="rebuildBrief" />
+        </template>
+      </template>
+      <span v-if="briefStartRefused" class="text-p-sm text-ink-gray-5">
+        {{ briefStartRefused }}
+      </span>
+
       <!-- Convert to Deal is deliberately absent. A converted lead stops being
            matched by the phone system, and none of the BrassHelm surfaces (the
            brief, the meetings, the timeline meetings) exist on the Deal page
@@ -50,14 +77,7 @@
       class="flex flex-1 overflow-hidden flex-col [&_[role='tab']]:px-0 [&_[role='tab']]:shrink-0 [&_[role='tablist']]:px-5 [&_[role='tablist']::-webkit-scrollbar]:h-0 [&_[role='tablist']]:min-h-[45px] [&_[role='tablist']]:gap-7.5 [&_[role='tabpanel']:not([hidden])]:flex [&_[role='tabpanel']:not([hidden])]:grow"
     >
       <template #tab-panel="{ tab }">
-        <CrmBriefPanel
-          v-if="tab.name === 'Brief'"
-          :brief="crmBrief"
-          :freshness="briefFreshness.data"
-          :isRunning="briefIsRunning"
-          :startRefused="briefStartRefused"
-          @rebuild="rebuildBrief"
-        />
+        <CrmBriefPanel v-if="tab.name === 'Brief'" :brief="crmBrief" />
         <CrmMeetingsPanel
           v-else-if="tab.name === 'Meetings'"
           :meetings="crmMeetings"
@@ -273,6 +293,7 @@ import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import CalendarIcon from '@/components/Icons/CalendarIcon.vue'
 import SparkleIcon from '@/components/Icons/SparkleIcon.vue'
 import InboxIcon from '@/components/Icons/InboxIcon.vue'
+import LoadingIndicator from '@/components/Icons/LoadingIndicator.vue'
 import CrmBriefPanel from '@/components/BrasshelmCrm/CrmBriefPanel.vue'
 import CrmMeetingsPanel from '@/components/BrasshelmCrm/CrmMeetingsPanel.vue'
 import OSCommsPanel from '@/components/BrasshelmOS/OSCommsPanel.vue'
@@ -397,15 +418,22 @@ const crmBrief = createListResource({
 // the brief; only the OS knows whether it has gone behind. When the OS says
 // nothing, the Brief tab renders exactly as it does without this.
 const {
-  status: briefFreshness,
   startRefused: briefStartRefused,
   isRunning: briefIsRunning,
+  hasSomethingToSay: briefHasSomethingToSay,
+  pendingDetail: briefPendingDetail,
   loadStatus: loadBriefFreshness,
   rebuild: rebuildBrief,
 } = useBriefFreshness(osContactId, {
   // The run rewrote the record, so re-read it and let the new brief render.
   onRefreshed: () => crmBrief.reload(),
 })
+
+// Asked once, as soon as the lead document names its OS contact. The header
+// cannot wait behind a tab the way the Comms fetch does, because the whole
+// point is telling him without being asked. One fetch per lead visit; the only
+// other traffic is the poll that runs while a rebuild is actually going.
+watch(osContactId, (id) => id && loadBriefFreshness(), { immediate: true })
 
 useUnsavedChangesWarning(() => document.isDirty)
 
@@ -575,13 +603,11 @@ const PANEL_TAB_NAMES = ['Brief', 'Meetings', 'Comms']
 
 const selectedTab = computed(() => tabs.value?.[tabIndex.value])
 
-// The OS fetches stay lazy: nothing is asked of the OS until its tab is opened.
-// The brief and the meetings themselves need no trigger here, because their
-// lists came with the page and the meeting bodies load as rows are opened. The
-// brief's freshness is an OS question, so it waits for the tab like Comms does.
+// Comms stays lazy: nothing is asked of it until its tab is opened. The brief
+// and the meetings need no trigger here, because their lists came with the page
+// and the meeting bodies load as rows are opened.
 watch(selectedTab, (tab) => {
-  if (tab?.name === 'Brief') loadBriefFreshness()
-  else if (tab?.name === 'Comms') loadOSComms()
+  if (tab?.name === 'Comms') loadOSComms()
 })
 
 const sections = createResource({

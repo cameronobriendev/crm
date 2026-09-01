@@ -118,5 +118,47 @@ export function useBriefFreshness(osId, { onRefreshed } = {}) {
   // True while the OS is writing, whether we asked for it or a schedule did.
   const isRunning = computed(() => starting.value || !!status.data?.running)
 
-  return { status, startRefused, isRunning, loadStatus, rebuild }
+  const isPending = computed(() => !!status.data?.pending)
+
+  // Anything at all to say. A current brief says nothing: the header speaks
+  // only when something needs attention. A rebuild we started keeps this true
+  // even if a later status read comes back empty, so the affordance cannot
+  // vanish underneath the person who just pressed it.
+  const hasSomethingToSay = computed(
+    () => isRunning.value || (!!status.data && isPending.value),
+  )
+
+  // Why it is behind, and when that gets fixed. Both live in the chip's
+  // tooltip: the header states the problem, hovering explains it.
+  const pendingDetail = computed(() => {
+    const reason =
+      status.data?.pendingReason || __('data changed since this brief')
+
+    let schedule
+    switch (status.data?.nextRun) {
+      case 'today':
+        schedule = __('rebuilds before your next meeting')
+        break
+      case 'tonight':
+        schedule = __('rebuilds tonight')
+        break
+      default:
+        schedule = __(
+          'no rebuild scheduled, rebuilds when used, or right now with the button',
+        )
+    }
+
+    return `${reason}, ${schedule}`
+  })
+
+  return {
+    status,
+    startRefused,
+    isRunning,
+    isPending,
+    hasSomethingToSay,
+    pendingDetail,
+    loadStatus,
+    rebuild,
+  }
 }
