@@ -97,6 +97,7 @@
           :tabs="tabs"
           @beforeSave="beforeStatusChange"
           @afterSave="reloadResources"
+          @activitiesChanged="refreshBriefFreshness"
         />
       </template>
     </Tabs>
@@ -423,6 +424,7 @@ const {
   hasSomethingToSay: briefHasSomethingToSay,
   pendingDetail: briefPendingDetail,
   loadStatus: loadBriefFreshness,
+  refreshStatus: refreshBriefFreshness,
   rebuild: rebuildBrief,
 } = useBriefFreshness(osContactId, {
   // The run rewrote the record, so re-read it and let the new brief render.

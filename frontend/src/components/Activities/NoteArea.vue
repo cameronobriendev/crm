@@ -70,17 +70,29 @@ function deleteNote(note) {
     subject: note.title || note.content,
     fallback: __('Are you sure you want to delete this note?'),
     onConfirm: async () => {
-      await toast.promise(
-        call('frappe.client.delete', {
-          doctype: 'FCRM Note',
-          name: note.name,
-        }),
-        {
-          loading: __('Deleting note...'),
-          success: __('Note deleted'),
-          error: __('Failed to delete note'),
-        },
-      )
+      // toast.promise hands back a toast id, not a promise. Awaiting it
+      // resolved on the next microtask, so the reload raced the delete: the
+      // server still had the note, the list came back with it, and the card
+      // stayed on screen until the page was reloaded by hand. Await the
+      // request itself and let the toast follow it alongside.
+      const deletion = call('frappe.client.delete', {
+        doctype: 'FCRM Note',
+        name: note.name,
+      })
+
+      toast.promise(deletion, {
+        loading: __('Deleting note...'),
+        success: __('Note deleted'),
+        error: __('Failed to delete note'),
+      })
+
+      try {
+        await deletion
+      } catch {
+        // The toast already said so. Nothing was deleted, so nothing to redraw.
+        return
+      }
+
       notes.value?.reload()
     },
   })

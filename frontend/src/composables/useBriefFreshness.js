@@ -72,6 +72,15 @@ export function useBriefFreshness(osId, { onRefreshed } = {}) {
     if (data?.running) pollUntilDone()
   }
 
+  // Ask again, ignoring the once-per-visit guard. Editing a note changes the
+  // very thing the OS decides freshness from, so the answer it gave when the
+  // page loaded is out of date the moment that edit lands. The check is live
+  // and instant, so this is one read per change and nothing periodic.
+  async function refreshStatus() {
+    const data = await fetchStatus()
+    if (data?.running) pollUntilDone()
+  }
+
   // Watches until the OS stops running, then lets the caller reload the brief
   // that the run just rewrote.
   function pollUntilDone() {
@@ -159,6 +168,7 @@ export function useBriefFreshness(osId, { onRefreshed } = {}) {
     hasSomethingToSay,
     pendingDetail,
     loadStatus,
+    refreshStatus,
     rebuild,
   }
 }

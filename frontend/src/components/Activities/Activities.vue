@@ -529,7 +529,7 @@ const props = defineProps({
   tabs: { type: Array, default: () => [] },
 })
 
-const emit = defineEmits(['beforeSave', 'afterSave'])
+const emit = defineEmits(['beforeSave', 'afterSave', 'activitiesChanged'])
 
 const route = useRoute()
 
@@ -553,6 +553,8 @@ const changeTabTo = (tabName) => {
   tabIndex.value = index
 }
 
+let activitiesFetchedOnce = false
+
 const all_activities = createResource({
   url: 'crm.api.activities.get_activities',
   params: { name: props.docname },
@@ -561,7 +563,16 @@ const all_activities = createResource({
   transform: ([versions, calls, notes, tasks, attachments]) => {
     return { versions, calls, notes, tasks, attachments }
   },
-  onSuccess: () => nextTick(() => scroll()),
+  // Every note and task mutation on this page ends here: the modals reload
+  // through afterDoctype, the deletes reload directly. So one announcement
+  // from this point covers create, edit and delete for both, and the page
+  // above can re-ask anything that depended on what the timeline holds.
+  // The first fetch is the page loading, not a change to react to.
+  onSuccess: () => {
+    if (activitiesFetchedOnce) emit('activitiesChanged')
+    activitiesFetchedOnce = true
+    nextTick(() => scroll())
+  },
 })
 
 const showWhatsappTemplates = ref(false)

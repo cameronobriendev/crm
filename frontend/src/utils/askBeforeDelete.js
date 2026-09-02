@@ -44,8 +44,15 @@ export function askBeforeDelete({ title, subject, fallback, onConfirm }) {
         theme: 'red',
         variant: 'solid',
         async onClick(close) {
-          await onConfirm()
-          close()
+          // The dialog closes whether the delete worked or not. A failure has
+          // already said so in a toast, and leaving the dialog open on a
+          // rejected promise strands the reader with a button that will fail
+          // again.
+          try {
+            await onConfirm()
+          } finally {
+            close()
+          }
         },
       },
     ],
