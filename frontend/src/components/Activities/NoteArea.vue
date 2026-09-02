@@ -11,7 +11,7 @@
           {
             label: __('Delete'),
             icon: 'trash-2',
-            onClick: () => deleteNote(note.name),
+            onClick: () => deleteNote(note),
           },
         ]"
         class="h-6 w-6"
@@ -54,6 +54,7 @@ import UserAvatar from '@/components/UserAvatar.vue'
 import TimelineTimestamp from '@/components/Activities/TimelineTimestamp.vue'
 import { Dropdown, TextEditor, call, toast } from 'frappe-ui'
 import { usersStore } from '@/stores/users'
+import { askBeforeDelete } from '@/utils/askBeforeDelete'
 
 defineProps({
   note: { type: Object, default: () => ({}) },
@@ -63,18 +64,25 @@ const notes = defineModel({ type: Object })
 
 const { getUser } = usersStore()
 
-async function deleteNote(name) {
-  await toast.promise(
-    call('frappe.client.delete', {
-      doctype: 'FCRM Note',
-      name,
-    }),
-    {
-      loading: __('Deleting note...'),
-      success: __('Note deleted'),
-      error: __('Failed to delete note'),
+function deleteNote(note) {
+  askBeforeDelete({
+    title: __('Delete note'),
+    subject: note.title || note.content,
+    fallback: __('Are you sure you want to delete this note?'),
+    onConfirm: async () => {
+      await toast.promise(
+        call('frappe.client.delete', {
+          doctype: 'FCRM Note',
+          name: note.name,
+        }),
+        {
+          loading: __('Deleting note...'),
+          success: __('Note deleted'),
+          error: __('Failed to delete note'),
+        },
+      )
+      notes.value?.reload()
     },
-  )
-  notes.value?.reload()
+  })
 }
 </script>

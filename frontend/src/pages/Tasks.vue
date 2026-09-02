@@ -208,6 +208,7 @@ import { getMeta } from '@/stores/meta'
 import { usersStore } from '@/stores/users'
 import { formatDate } from '@/utils'
 import { getReferenceLabel, getReferenceRoute } from '@/utils/reference'
+import { askBeforeDelete } from '@/utils/askBeforeDelete'
 import { timestampCell } from '@/composables/useTimelinePreferences'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
 import { Tooltip, Avatar, TextEditor, Dropdown, call } from 'frappe-ui'
@@ -390,10 +391,18 @@ function actions(name) {
     {
       label: __('Delete'),
       icon: 'trash-2',
-      onClick: () => {
-        deleteTask(name)
-        tasks.value.reload()
-      },
+      onClick: () =>
+        askBeforeDelete({
+          title: __('Delete task'),
+          subject: getRow(name, 'title')?.label,
+          fallback: __('Are you sure you want to delete this task?'),
+          // The reload waits for the delete now. It used to fire alongside it
+          // and could re-read the list before the row was gone.
+          onConfirm: async () => {
+            await deleteTask(name)
+            tasks.value.reload()
+          },
+        }),
     },
   ]
 }

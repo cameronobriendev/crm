@@ -43,7 +43,7 @@
               {
                 label: __('Delete'),
                 icon: 'trash-2',
-                onClick: () => deleteNote(note.name),
+                onClick: () => deleteNote(note),
               },
             ]"
           >
@@ -101,6 +101,7 @@ import { useDoctypeModal } from '@/composables/doctypeModal'
 import EmptyState from '@/components/ListViews/EmptyState.vue'
 import { usersStore } from '@/stores/users'
 import { timeAgo, formatDate } from '@/utils'
+import { askBeforeDelete } from '@/utils/askBeforeDelete'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
 import { TextEditor, call, Dropdown, Tooltip, ListFooter } from 'frappe-ui'
 import { ref, watch } from 'vue'
@@ -154,12 +155,19 @@ function editNote(noteName) {
   })
 }
 
-async function deleteNote(name) {
-  await call('frappe.client.delete', {
-    doctype: 'FCRM Note',
-    name,
+function deleteNote(note) {
+  askBeforeDelete({
+    title: __('Delete note'),
+    subject: note.title || note.content,
+    fallback: __('Are you sure you want to delete this note?'),
+    onConfirm: async () => {
+      await call('frappe.client.delete', {
+        doctype: 'FCRM Note',
+        name: note.name,
+      })
+      notes.value.reload()
+    },
   })
-  notes.value.reload()
 }
 
 const openNoteFromURL = () => {
